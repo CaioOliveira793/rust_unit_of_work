@@ -1,37 +1,35 @@
 use async_trait::async_trait;
 use tokio_postgres::error::DbError;
 
-#[async_trait]
-pub trait UnitOfWork: RepositoryBuilder {
-    /// Creates a new transaction.
-    async fn transaction<Trx>(&self) -> Result<Trx, RepositoryError>
-    where
-        Trx: TransactionUnit<Connection = Self::Connection>;
+pub trait Repository {
+    type Connection;
 }
 
 #[async_trait]
-pub trait TransactionUnit: RepositoryBuilder {
+pub trait UnitOfWork: Repository {
+    type Transaction<'t>: TransactionUnit
+    where
+        Self: 't;
+
+    /// Creates a new transaction.
+    async fn transaction<'s>(&'s mut self) -> Result<Self::Transaction<'s>, RepositoryError>;
+}
+
+#[async_trait]
+pub trait TransactionUnit: Repository {
     async fn commit(self) -> Result<(), RepositoryError>;
     async fn rollback(self) -> Result<(), RepositoryError>;
 
-    async fn save_point<SP>(&self, name: &str) -> Result<SP, RepositoryError>
+    async fn save_point(&mut self, name: &str) -> Result<Self, RepositoryError>
     where
-        SP: TransactionUnit<Connection = Self::Connection>;
+        Self: Sized;
 
     /// Returns the nested level
-    fn depth() -> u32;
+    fn depth(&self) -> u32;
 }
 
-pub trait RepositoryBuilder {
-    type Connection;
-
-    fn repo<R>(&self) -> R
-    where
-        R: Repository<Connection = Self::Connection>;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TransactionInfo {
+#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
+pub struct TransactionState {
     /// Indicates if transaction is open
     pub open: bool,
 
@@ -39,13 +37,19 @@ pub struct TransactionInfo {
     pub depth: u32,
 }
 
-pub trait Repository {
-    type Connection;
+impl TransactionState {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    fn new(conn: Self::Connection, info: TransactionInfo) -> Self;
+    pub fn created_transaction() -> Self {
+        Self {
+            open: true,
+            depth: 1,
+        }
+    }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepositoryError {
     Connection(String),
