@@ -12,11 +12,7 @@ impl From<Error> for RepositoryError {
             return RepositoryError::Db(db_err.clone());
         }
 
-        if err.is_closed() {
-            return RepositoryError::Connection(err.to_string());
-        }
-
-        RepositoryError::Unknown(err.to_string())
+        RepositoryError::Unknown(err.into())
     }
 }
 

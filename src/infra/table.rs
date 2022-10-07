@@ -10,14 +10,6 @@ pub enum TCustomer {
     Name,
     #[iden = "cpf"]
     Cpf,
-    #[iden = "tipo"]
-    Kind,
-    #[iden = "relacao"]
-    Relation,
-    #[iden = "id_importacao_cliente"]
-    CustomerImportId,
-    #[iden = "id_documento_importacao_cliente"]
-    CustomerImportDocumentId,
     #[iden = "criado_em"]
     Created,
     #[iden = "atualizado_em"]

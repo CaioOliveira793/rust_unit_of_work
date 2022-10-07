@@ -1,4 +1,6 @@
 pub mod customer {
+    use tokio_postgres::Client;
+
     use crate::{
         domain::{
             base::{TransactionUnit, UnitOfWork},
@@ -12,29 +14,23 @@ pub mod customer {
         pub data: CreateCustomerData,
     }
 
-    async fn create_unit_somehow<DB>() -> DB
+    async fn validate_customer_data<Cr>(_data: &CreateCustomerData, _repo: &Cr)
     where
-        DB: UnitOfWork,
+        Cr: CustomerRepository,
     {
-        todo!()
+        println!("validating...");
     }
 
-    async fn validate_customer_data<CR>(_data: &CreateCustomerData, _repo: &CR)
-    where
-        CR: CustomerRepository,
-    {
-        todo!()
-    }
-
-    // pub async fn create_customer<'t, DB>(dto: CreateCustomerRequest) -> Result<Customer, ()>
+    // pub async fn create_customer<'trx, Db>(dto: CreateCustomerRequest) -> Result<Customer, ()>
     // where
-    //     DB: UnitOfWork,
-    //     DB: TransactionUnit,
-    //     DB: CustomerRepository,
+    //     Db: UnitOfWork<Transaction<'trx> = Db>,
+    //     Db: TransactionUnit,
+    //     Db: CustomerRepository,
+    //     Db: 'trx,
     // {
-    //     let mut unit = create_unit_somehow::<DB>().await;
+    //     let mut unit = create_unit_somehow::<Db>().await;
 
-    //     validate_customer_data::<DB>(&dto.data, &unit).await;
+    //     validate_customer_data::<Db>(&dto.data, &unit).await;
     //     let customer = Customer::try_from(dto.data)?;
 
     //     let mut trx = unit.transaction().await.unwrap();
@@ -53,10 +49,11 @@ pub mod customer {
     //     Err(())
     // }
 
-    pub async fn concrete_create_customer(dto: CreateCustomerRequest) -> Result<Customer, ()> {
-        let mut unit = create_unit_somehow::<PgClient>().await;
-
-        validate_customer_data(&dto.data, &unit).await;
+    pub async fn concrete_create_customer(
+        unit: &mut PgClient<Client>,
+        dto: CreateCustomerRequest,
+    ) -> Result<Customer, ()> {
+        validate_customer_data(&dto.data, unit).await;
         let customer = Customer::try_from(dto.data)?;
 
         let mut trx = unit.transaction().await.unwrap();
@@ -68,9 +65,7 @@ pub mod customer {
 
         unit.insert([customer.clone()]).await.unwrap();
 
-        CustomerRepository::insert(&mut unit, [customer])
-            .await
-            .unwrap();
+        CustomerRepository::insert(unit, [customer]).await.unwrap();
 
         Err(())
     }

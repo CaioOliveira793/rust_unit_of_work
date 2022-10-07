@@ -5,22 +5,25 @@ pub trait Repository {
     type Connection;
 }
 
-#[async_trait]
-pub trait UnitOfWork: Repository {
-    type Transaction<'t>: TransactionUnit
-    where
-        Self: 't;
+pub trait Transactor {
+    type Transaction<'t>: TransactionUnit;
+}
 
+#[async_trait]
+pub trait UnitOfWork: Repository + Transactor {
     /// Creates a new transaction.
     async fn transaction<'s>(&'s mut self) -> Result<Self::Transaction<'s>, RepositoryError>;
 }
 
 #[async_trait]
-pub trait TransactionUnit: Repository {
+pub trait TransactionUnit: Repository + Transactor {
     async fn commit(self) -> Result<(), RepositoryError>;
     async fn rollback(self) -> Result<(), RepositoryError>;
 
-    async fn save_point(&mut self, name: &str) -> Result<Self, RepositoryError>
+    async fn save_point<'s>(
+        &'s mut self,
+        name: &str,
+    ) -> Result<Self::Transaction<'s>, RepositoryError>
     where
         Self: Sized;
 
@@ -38,22 +41,19 @@ pub struct TransactionState {
 }
 
 impl TransactionState {
+    #[inline]
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn created_transaction() -> Self {
-        Self {
-            open: true,
-            depth: 1,
-        }
+    #[inline]
+    pub fn from_open_transaction(depth: u32) -> Self {
+        Self { open: true, depth }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum RepositoryError {
-    Connection(String),
     Db(DbError),
-    Timeout,
-    Unknown(String),
+    Unknown(anyhow::Error),
 }

@@ -1,5 +1,5 @@
 use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime, SslMode};
-use tokio_postgres::NoTls;
+use tokio_postgres::{Client, NoTls};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 fn connection_config() -> Config {
@@ -8,7 +8,7 @@ fn connection_config() -> Config {
     let port: u16 = std::env::var("DATABASE_PORT")
         .expect("Missing env var DATABASE_PORT")
         .parse()
-        .unwrap();
+        .expect("Invalid env var DATABASE_PORT");
     let user = std::env::var("DATABASE_USER").expect("Missing env var DATABASE_USER");
     let password = std::env::var("DATABASE_PASSWORD").expect("Missing env var DATABASE_PASSWORD");
 
@@ -45,8 +45,13 @@ fn tls_config() -> MakeRustlsConnect {
     MakeRustlsConnect::new(tls_config)
 }
 
-pub fn create_connection() -> Pool {
+pub fn create_pool() -> Pool {
     let cfg = connection_config();
 
     cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap()
+}
+
+pub fn create_client() -> Client {
+    // TODO: create tokio_postgres client
+    todo!()
 }

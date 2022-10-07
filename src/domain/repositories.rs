@@ -15,9 +15,9 @@ pub trait CustomerRepository: Repository {
     //     cpfs: I,
     // ) -> Result<Vec<String>, RepositoryError>;
 
-    async fn insert<I: IntoIterator<Item = Customer> + Send>(
-        &mut self,
-        customers: I,
-    ) -> Result<(), RepositoryError>;
+    async fn insert<I>(&mut self, customers: I) -> Result<(), RepositoryError>
+    where
+        I: IntoIterator<Item = Customer> + Send;
+
     async fn find(&self, id: &Uuid) -> Result<Option<Customer>, RepositoryError>;
 }
