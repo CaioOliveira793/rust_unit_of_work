@@ -14,6 +14,9 @@ pub struct PgClient<C: GenericClient> {
     transaction: TransactionState,
 }
 
+pub type PgUnit = PgClient<Client>;
+pub type PgTrxUnit<'t> = PgClient<Transaction<'t>>;
+
 enum OpenTransaction<'c, C: GenericClient> {
     Created(Transaction<'c>),
     Reused(&'c mut C),

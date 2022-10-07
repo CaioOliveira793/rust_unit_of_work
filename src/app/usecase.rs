@@ -1,13 +1,11 @@
 pub mod customer {
-    use tokio_postgres::Client;
-
     use crate::{
         domain::{
             base::{TransactionUnit, UnitOfWork},
             entities::customer::{CreateCustomerData, Customer},
             repositories::CustomerRepository,
         },
-        infra::repositories::PgClient,
+        infra::repositories::PgUnit,
     };
 
     pub struct CreateCustomerRequest {
@@ -21,24 +19,27 @@ pub mod customer {
         println!("validating...");
     }
 
-    // pub async fn create_customer<'trx, Db>(dto: CreateCustomerRequest) -> Result<Customer, ()>
+    // pub async fn create_customer<'db, Db, Trx>(
+    //     mut unit: Db,
+    //     req: CreateCustomerRequest,
+    // ) -> Result<Customer, ()>
     // where
-    //     Db: UnitOfWork<Transaction<'trx> = Db>,
+    //     Db: UnitOfWork<Transaction<'db> = Db>,
     //     Db: TransactionUnit,
     //     Db: CustomerRepository,
-    //     Db: 'trx,
+    //     Db: 'db,
     // {
-    //     let mut unit = create_unit_somehow::<Db>().await;
+    //     validate_customer_data::<Db>(&req.data, &unit).await;
+    //     let customer = Customer::try_from(req.data)?;
 
-    //     validate_customer_data::<Db>(&dto.data, &unit).await;
-    //     let customer = Customer::try_from(dto.data)?;
+    //     {
+    //         let mut trx = unit.transaction().await.unwrap();
 
-    //     let mut trx = unit.transaction().await.unwrap();
+    //         trx.insert([customer.clone()]).await.unwrap();
+    //         trx.insert([customer.clone()]).await.unwrap();
 
-    //     trx.insert([customer.clone()]).await.unwrap();
-    //     trx.insert([customer.clone()]).await.unwrap();
-
-    //     trx.commit().await.unwrap();
+    //         trx.commit().await.unwrap();
+    //     }
 
     //     unit.insert([customer.clone()]).await.unwrap();
 
@@ -50,11 +51,11 @@ pub mod customer {
     // }
 
     pub async fn concrete_create_customer(
-        unit: &mut PgClient<Client>,
-        dto: CreateCustomerRequest,
+        unit: &mut PgUnit,
+        req: CreateCustomerRequest,
     ) -> Result<Customer, ()> {
-        validate_customer_data(&dto.data, unit).await;
-        let customer = Customer::try_from(dto.data)?;
+        validate_customer_data(&req.data, unit).await;
+        let customer = Customer::try_from(req.data)?;
 
         let mut trx = unit.transaction().await.unwrap();
 

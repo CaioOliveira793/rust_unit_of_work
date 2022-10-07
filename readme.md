@@ -52,6 +52,6 @@ where
 ## Todo
 
 - [ ] Create a working example with the `tokio_postgres` client
-- [ ] Add more database connections implementations
+- [ ] Implement more database connections
   - [ ] `mysql_async`
   - [ ] `rusqlite`
