@@ -52,6 +52,6 @@ pub fn create_pool() -> Pool {
 }
 
 pub fn create_client() -> Client {
-    // TODO: create tokio_postgres client
+    // create raw tokio_postgres client
     todo!()
 }

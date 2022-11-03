@@ -1,10 +1,10 @@
 #![allow(dead_code)]
+#![feature(async_closure)]
 
-use app::usecase::customer::CreateCustomerRequest;
 use domain::entities::customer::CreateCustomerData;
 use uuid::Uuid;
 
-use crate::{config::connection::create_client, infra::repositories::PgClient};
+use crate::{config::connection::create_client, infra::repositories::PgUnit};
 
 mod app;
 mod config;
@@ -13,24 +13,29 @@ mod infra;
 
 #[tokio::main]
 async fn main() {
-    let dto = CreateCustomerRequest {
-        data: CreateCustomerData {
-            id: Uuid::new_v4(),
-            cpf: "23923824238".into(),
-            name: "Rustacean".into(),
-            phones: vec![],
-        },
+    let data = CreateCustomerData {
+        id: Uuid::new_v4(),
+        cpf: "23923824238".into(),
+        name: "Rustacean".into(),
+        phones: vec![],
     };
 
     // let pool = create_pool();
     // let conn = pool.get().await.unwrap().client().to_owned();
-    // let client = PgClient::new(conn);
+    // let client = PgUnit::new(conn);
 
-    let mut client = PgClient::new(create_client());
+    // Impratical, PgClient does no implement Clone
+    // only the pool connection
+    let client = PgUnit::new(create_client());
 
-    let customer = app::usecase::customer::concrete_create_customer(&mut client, dto)
+    let customer = app::usecase::customer::concrete_create_customer(client, data)
         .await
         .unwrap();
-
     println!("customer {customer:?}");
+
+    // let client = PgUnit::new(create_client());
+    // let customer = app::usecase::customer::create_customer(client, data)
+    //     .await
+    //     .unwrap();
+    // println!("customer {customer:?}");
 }
