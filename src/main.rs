@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use domain::entities::customer::CreateCustomerData;
+use domain::entity::CreateUserDto;
 use uuid::Uuid;
 
-use crate::{config::connection::create_client, infra::repositories::PgUnit};
+use crate::{config::connection::create_client, infra::database::client::PgUnit};
 
 mod app;
 mod config;
@@ -12,9 +12,9 @@ mod infra;
 
 #[tokio::main]
 async fn main() {
-    let data = CreateCustomerData {
+    let data = CreateUserDto {
         id: Uuid::new_v4(),
-        cpf: "23923824238".into(),
+        email: "rustac@email.com".into(),
         name: "Rustacean".into(),
         phones: vec![],
     };
@@ -27,14 +27,14 @@ async fn main() {
     // only the pool connection
     let client = PgUnit::new(create_client());
 
-    let customer = app::usecase::customer::concrete_create_customer(client, data.clone())
+    let user = app::usecase::concrete_create_user(client, data.clone())
         .await
         .unwrap();
-    println!("customer {customer:?}");
+    println!("user {user:?}");
 
     // let client = PgUnit::new(create_client());
-    // let customer = app::usecase::customer::create_customer::<PgUnit, PgTrxUnit>(client, data)
+    // let user = app::usecase::create_user::<PgUnit, PgTrxUnit>(client, data)
     //     .await
     //     .unwrap();
-    // println!("customer {customer:?}");
+    // println!("user {user:?}");
 }

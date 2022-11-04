@@ -1,96 +1,119 @@
-pub mod customer {
-    use sea_query::{Alias, Expr, InsertStatement, Query, SelectStatement};
-    use uuid::Uuid;
+use sea_query::{Alias, Expr, InsertStatement, Query, SelectStatement};
+use uuid::Uuid;
 
-    use crate::{
-        domain::entities::customer::Customer,
-        infra::table::{TCustomer, TCustomerPhone},
-    };
+use crate::domain::entity::User;
+use table::*;
 
-    pub struct SelectCustomerSttm {
-        pub customer: SelectStatement,
-        pub phone: SelectStatement,
+mod table {
+    use sea_query::Iden;
+
+    #[derive(Iden)]
+    #[iden = "user"]
+    pub enum TUser {
+        Table,
+        #[iden = "id"]
+        Id,
+        #[iden = "name"]
+        Name,
+        #[iden = "email"]
+        Email,
+        #[iden = "created"]
+        Created,
+        #[iden = "updated"]
+        Updated,
     }
 
-    pub struct InsertCustomerSttm {
-        pub customer: InsertStatement,
-        pub phone: InsertStatement,
+    #[derive(Iden)]
+    #[iden = "user_phone"]
+    pub enum TUserPhone {
+        Table,
+        #[iden = "id"]
+        Id,
+        #[iden = "number"]
+        Number,
+        #[iden = "verified"]
+        Verified,
+        #[iden = "user_id"]
+        UserId,
     }
+}
 
-    pub fn select_by_id(id: &Uuid) -> SelectCustomerSttm {
-        let mut customer_sttm = Query::select();
-        customer_sttm
-            .from(TCustomer::Table)
-            .expr_as(Expr::tbl(TCustomer::Table, TCustomer::Id), Alias::new("id"))
-            .expr_as(Expr::col(TCustomer::Name), Alias::new("name"))
-            .expr_as(Expr::col(TCustomer::Cpf), Alias::new("cpf"))
-            .expr_as(Expr::col(TCustomer::Created), Alias::new("created"))
-            .expr_as(Expr::col(TCustomer::Updated), Alias::new("updated"))
-            .and_where(Expr::col(TCustomer::Id).eq(*id));
+pub struct SelectUserSttm {
+    pub user: SelectStatement,
+    pub phone: SelectStatement,
+}
 
-        let mut phone_sttm = Query::select();
-        phone_sttm
-            .from(TCustomerPhone::Table)
-            .expr_as(
-                Expr::tbl(TCustomerPhone::Table, TCustomerPhone::Id),
-                Alias::new("id"),
-            )
-            .expr_as(
-                Expr::col(TCustomerPhone::CustomerId),
-                Alias::new("customer_id"),
-            )
-            .expr_as(Expr::col(TCustomerPhone::Number), Alias::new("number"))
-            .expr_as(Expr::col(TCustomerPhone::Whatsapp), Alias::new("whatsapp"))
-            .and_where(Expr::col(TCustomerPhone::CustomerId).eq(*id));
+pub struct InsertUserSttm {
+    pub user: InsertStatement,
+    pub phone: InsertStatement,
+}
 
-        SelectCustomerSttm {
-            customer: customer_sttm,
-            phone: phone_sttm,
-        }
-    }
+pub fn select_user_by_id(id: &Uuid) -> SelectUserSttm {
+    let mut user = Query::select();
+    user.from(TUser::Table)
+        .expr_as(Expr::tbl(TUser::Table, TUser::Id), Alias::new("id"))
+        .expr_as(Expr::col(TUser::Name), Alias::new("name"))
+        .expr_as(Expr::col(TUser::Email), Alias::new("email"))
+        .expr_as(Expr::col(TUser::Created), Alias::new("created"))
+        .expr_as(Expr::col(TUser::Updated), Alias::new("updated"))
+        .and_where(Expr::col(TUser::Id).eq(*id));
 
-    pub fn insert<I>(customers: I) -> InsertCustomerSttm
-    where
-        I: IntoIterator<Item = Customer>,
-    {
-        let mut customer = Query::insert();
-        customer.into_table(TCustomer::Table);
-        customer.columns([
-            TCustomer::Id,
-            TCustomer::Cpf,
-            TCustomer::Name,
-            TCustomer::Created,
-            TCustomer::Updated,
+    let mut phone = Query::select();
+    phone
+        .from(TUserPhone::Table)
+        .expr_as(
+            Expr::tbl(TUserPhone::Table, TUserPhone::Id),
+            Alias::new("id"),
+        )
+        .expr_as(Expr::col(TUserPhone::UserId), Alias::new("user_id"))
+        .expr_as(Expr::col(TUserPhone::Number), Alias::new("number"))
+        .expr_as(Expr::col(TUserPhone::Verified), Alias::new("verified"))
+        .and_where(Expr::col(TUserPhone::UserId).eq(*id));
+
+    SelectUserSttm { user, phone }
+}
+
+pub fn insert_user<I>(users: I) -> InsertUserSttm
+where
+    I: IntoIterator<Item = User>,
+{
+    let mut user = Query::insert();
+    user.into_table(TUser::Table);
+    user.columns([
+        TUser::Id,
+        TUser::Email,
+        TUser::Name,
+        TUser::Created,
+        TUser::Updated,
+    ]);
+
+    let mut phone = Query::insert();
+    phone.into_table(TUserPhone::Table);
+    phone.columns([
+        TUserPhone::Id,
+        TUserPhone::Number,
+        TUserPhone::Verified,
+        TUserPhone::UserId,
+    ]);
+
+    for us in users {
+        user.values_panic([
+            us.id.into(),
+            us.email.into(),
+            us.name.into(),
+            us.created.into(),
+            us.updated.into(),
         ]);
 
-        let mut phone = Query::insert();
-        phone.into_table(TCustomerPhone::Table);
-        phone.columns([
-            TCustomerPhone::Id,
-            TCustomerPhone::Number,
-            TCustomerPhone::Whatsapp,
-            TCustomerPhone::CustomerId,
-        ]);
-
-        for cust in customers {
-            customer.values_panic([
-                cust.id.into(),
-                cust.cpf.into(),
-                cust.name.into(),
-                cust.created.into(),
-                cust.updated.into(),
+        for p in us.phones {
+            phone.values_panic([
+                Uuid::new_v4().into(),
+                p.number.into(),
+                p.verified.into(),
+                us.id.into(),
             ]);
-
-            for p in cust.phones {
-                phone.values_panic([
-                    Uuid::new_v4().into(),
-                    p.number.into(),
-                    p.verified.into(),
-                    cust.id.into(),
-                ]);
-            }
         }
-
-        InsertCustomerSttm { customer, phone }
     }
+
+    InsertUserSttm { user, phone }
 }
