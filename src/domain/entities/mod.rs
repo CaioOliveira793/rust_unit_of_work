@@ -1,6 +1,5 @@
 macro_rules! read_prop {
     ($propfn:ident, $transf:ident, $out:ty) => {
-        #[allow(dead_code)]
         pub fn $propfn(&self) -> &$out {
             return &self.$transf
         }

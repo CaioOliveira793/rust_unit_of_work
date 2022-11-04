@@ -23,15 +23,6 @@ enum OpenTransaction<'c, C: GenericClient> {
     Reused(&'c mut C),
 }
 
-macro_rules! open_trx_conn {
-    ($trx:ident, $func:expr) => {
-        match $trx {
-            OpenTransaction::Created(ref mut trx) => $func(trx).await,
-            OpenTransaction::Reused(trx) => $func(trx).await,
-        }
-    };
-}
-
 impl<C: GenericClient> PgClient<C> {
     pub fn new(client: C) -> Self {
         Self {
@@ -132,7 +123,10 @@ impl<C: GenericClient + Send + Sync> CustomerRepository for PgClient<C> {
     ) -> Result<(), RepositoryError> {
         let mut trx = self.make_transaction().await?;
 
-        open_trx_conn!(trx, async move |trx| insert_customer(trx, customers).await)?;
+        match trx {
+            OpenTransaction::Created(ref mut trx) => insert_customer(trx, customers).await?,
+            OpenTransaction::Reused(trx) => insert_customer(trx, customers).await?,
+        }
 
         Ok(())
     }

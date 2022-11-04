@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![feature(async_closure)]
 
 use domain::entities::customer::CreateCustomerData;
 use uuid::Uuid;
@@ -28,13 +27,13 @@ async fn main() {
     // only the pool connection
     let client = PgUnit::new(create_client());
 
-    let customer = app::usecase::customer::concrete_create_customer(client, data)
+    let customer = app::usecase::customer::concrete_create_customer(client, data.clone())
         .await
         .unwrap();
     println!("customer {customer:?}");
 
     // let client = PgUnit::new(create_client());
-    // let customer = app::usecase::customer::create_customer(client, data)
+    // let customer = app::usecase::customer::create_customer::<PgUnit, PgTrxUnit>(client, data)
     //     .await
     //     .unwrap();
     // println!("customer {customer:?}");

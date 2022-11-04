@@ -85,7 +85,7 @@ pub mod customer {
                 phone.values_panic([
                     Uuid::new_v4().into(),
                     p.number.into(),
-                    p.whatsapp.into(),
+                    p.verified.into(),
                     cust.id.into(),
                 ]);
             }

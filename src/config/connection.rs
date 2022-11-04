@@ -26,7 +26,6 @@ fn connection_config() -> Config {
     cfg
 }
 
-#[allow(dead_code)]
 fn tls_config() -> MakeRustlsConnect {
     let mut root_store = rustls::RootCertStore::empty();
     root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {

@@ -19,7 +19,7 @@ impl From<Error> for RepositoryError {
 impl From<tokio_postgres::Row> for Phone {
     fn from(row: tokio_postgres::Row) -> Self {
         Self {
-            whatsapp: row.get("whatsapp"),
+            verified: row.get("verified"),
             number: row.get("number"),
         }
     }

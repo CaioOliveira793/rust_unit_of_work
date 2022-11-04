@@ -1,7 +1,7 @@
 pub mod customer {
     use crate::{
         domain::{
-            base::{TransactionUnit, Transactor, UnitOfWork},
+            base::{TransactionUnit, UnitOfWork},
             entities::customer::{CreateCustomerData, Customer},
             repositories::CustomerRepository,
         },
@@ -15,14 +15,15 @@ pub mod customer {
         println!("validating...");
     }
 
-    pub async fn create_customer<Unit>(
+    pub async fn create_customer<Unit, Trx>(
         mut unit: Unit,
         data: CreateCustomerData,
     ) -> Result<Customer, ()>
     where
-        Unit: UnitOfWork,
+        for<'t> Unit: UnitOfWork<Transaction<'t> = Trx>,
         Unit: CustomerRepository,
-        for<'t> <Unit as Transactor>::Transaction<'t>: CustomerRepository,
+        Trx: TransactionUnit,
+        Trx: CustomerRepository,
     {
         validate_customer_data(&data, &unit).await;
         let customer = Customer::try_from(data)?;
@@ -35,7 +36,6 @@ pub mod customer {
         trx.commit().await.unwrap();
 
         unit.insert([customer.clone()]).await.unwrap();
-
         CustomerRepository::insert(&mut unit, [customer])
             .await
             .unwrap();
@@ -58,7 +58,6 @@ pub mod customer {
         trx.commit().await.unwrap();
 
         unit.insert([customer.clone()]).await.unwrap();
-
         CustomerRepository::insert(&mut unit, [customer])
             .await
             .unwrap();
