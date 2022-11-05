@@ -4,7 +4,7 @@ A rust implementation of the [Unit of Work pattern](https://martinfowler.com/eaa
 
 ## Goal
 
-- Full generic way to access the database through the `UnitOfWork`, `TransactionUnit`, and repository traits.
+- Fully generic way to access the database through `DbUnit`, `TransactionUnit`, and repository traits.
 - Type safe way to create database transactions based on the trait methods, e.g. only possible to make a commit/roolback inside a transaction, invalidate the possibility of creating nested transactions.
 
 Example code:
@@ -27,7 +27,7 @@ where
 
 async fn create_user<Unit, Trx>(mut unit: Unit, req: CreateUserRequest) -> Result<User, Error>
 where
-	for<'t> Unit: UnitOfWork<Transaction<'t> = Trx>,
+	for<'t> Unit: DbUnit<Transaction<'t> = Trx>,
 	Unit: UserRepository,
 	Trx: TransactionUnit,
 	Trx: UserRepository,
@@ -51,7 +51,7 @@ where
 
 ## Status
 
-Currently usable providing the concrete type that implements the `UnitOfWork` trait
+Currently usable providing the concrete type that implements the `DbUnit` trait
 
 At the moment, a fully generic function is not possible due an issue with HRTB
 
@@ -69,3 +69,5 @@ At the moment, a fully generic function is not possible due an issue with HRTB
   - `bb8-postgres`
   - `mysql_async`
   - `rusqlite`
+- create trait `DbDriver` to have a common interface when implementing the repositories
+  - implement the repositories through functions generic over `DbDriver`
