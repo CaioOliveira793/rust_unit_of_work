@@ -66,11 +66,7 @@ pub mod connection {
         config
     }
 
-    pub type PgDeadpool = deadpool_postgres::Pool;
-    pub type PgDeadpoolConn = deadpool_postgres::Client;
-    pub type PgBb8pool = bb8::Pool<PostgresConnectionManager<MakeRustlsConnect>>;
-
-    pub fn create_deadpool() -> PgDeadpool {
+    pub fn create_pg_deadpool() -> deadpool_postgres::Pool {
         let config = connection_config();
         let tls = tls_config();
 
@@ -79,7 +75,9 @@ pub mod connection {
             .unwrap()
     }
 
-    pub async fn create_bb8pool() -> PgBb8pool {
+    pub type PgBb8pool = bb8::Pool<PostgresConnectionManager<MakeRustlsConnect>>;
+
+    pub async fn create_pg_bb8pool() -> PgBb8pool {
         let config = connection_config();
         let tls = tls_config();
         let manager = PostgresConnectionManager::new(config, tls);

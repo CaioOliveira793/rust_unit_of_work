@@ -1,0 +1,45 @@
+[package]
+name = "abstract_db_access"
+version = "0.0.1"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = true
+
+[lib]
+name = "abstract_db_access"
+path = "src/lib.rs"
+
+[features]
+default = []
+pg_tokio = [
+	"tokio-postgres"
+]
+pg_deadpool = [
+	"tokio-postgres",
+	"deadpool-postgres"
+]
+pg_bb8 = []
+
+[dependencies]
+async-trait = { version = "0.1.58" }
+
+tokio-postgres = { version = "0.7.7", optional = true }
+deadpool-postgres = { version = "0.10.3", optional = true }
+
+[dev-dependencies]
+utilities = { path = "../utilities" }
+
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread", "net"] }
+tokio-postgres = { version = "0.7.7", features = ["with-uuid-1"] }
+
+uuid = { version = "1.2.1", features = ["v4"] }
+
+[[example]]
+name = "pg_deadpool"
+path = "examples/pg_deadpool.rs"
+test = true
+required-features = [
+	"pg_deadpool"
+]
