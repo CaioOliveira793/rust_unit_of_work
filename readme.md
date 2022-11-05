@@ -1,6 +1,6 @@
 # Unit of Work
 
-A rust implementation of the [Unit of Work pattern](https://martinfowler.com/eaaCatalog/unitOfWork.html) using GAT (Generic associated types)
+A rust implementation of the [Unit of Work pattern](https://martinfowler.com/eaaCatalog/unitOfWork.html) using GAT (Generic associated type)
 
 ## Goal
 
@@ -10,48 +10,62 @@ A rust implementation of the [Unit of Work pattern](https://martinfowler.com/eaa
 Example code:
 
 ```rust
-async fn validate_user_data<R>(data: &CreateUserDto, repo: &R)
+trait UserRepository: Repository {
+	async fn insert<I>(&mut self, user: I) -> Result<(), RepositoryError>
+	where
+		I: IntoIterator<Item = User>;
+
+	async fn find(&self, id: uuid::Uuid) -> Result<Option<User>, RepositoryError>;
+}
+
+async fn validate_user<R>(data: &User, repo: &R) -> Result<(), ValidationError>
 where
 	R: UserRepository,
 {
 	unimplemented!()
 }
 
-async fn create_user<DB>(req: CreateUserRequest) -> Result<User, ()>
+async fn create_user<Unit, Trx>(mut unit: Unit, req: CreateUserRequest) -> Result<User, Error>
 where
-	DB: UnitOfWork,
-	DB: TransactionUnit,
-	DB: UserRepository,
+	for<'t> Unit: UnitOfWork<Transaction<'t> = Trx>,
+	Unit: UserRepository,
+	Trx: TransactionUnit,
+	Trx: UserRepository,
 {
-	let mut unit = create_unit_somehow::<DB>().await?;
-
-	validate_user_data::<DB>(&req.data, &unit).await?;
 	let user = User::try_from(req.data)?;
+	validate_user(&user, &unit).await?;
 
 	let mut trx = unit.transaction().await?;
 
 	trx.insert([user.clone()]).await?;
-	trx.insert([user.clone()]).await?;
+	UserRepository::insert(trx, [user.clone()]).await?;
 
 	trx.commit().await?;
 
 	unit.insert([user.clone()]).await?;
+	UserRepository::insert(&mut unit, [user.clone()]).await?;
 
-	UserRepository::insert(&mut unit, [user])
-		.await
-		?;
-
-	Err(())
+	Ok(user)
 }
 ```
 
 ## Status
 
-- Currently usable providing the concrete type that implements the `UnitOfWork` trait
+Currently usable providing the concrete type that implements the `UnitOfWork` trait
+
+At the moment, a fully generic function is not possible due an issue with HRTB
+
+### Higher-Rank Trait Bound issue investigation
+
+- A [great article](https://lucumr.pocoo.org/2022/9/11/abstracting-over-ownership/) that explain the issues encountered in this crate
+- [Lifetime inference problem](https://users.rust-lang.org/t/hrtb-on-multiple-generics/34255)
+- [A value does not implement some type with the specified lifetimes, when actually is implemented for any lifetime](https://github.com/rust-lang/rust/issues/70263)
+- [Inconsistent behaviour with GAT](https://github.com/rust-lang/rust/issues/99548)
+- [RFC for bounded universal quantification for lifetimes](https://github.com/rust-lang/rfcs/pull/3261)
 
 ## Todo
 
-- [ ] Create a working example with the `tokio_postgres` client
-- [ ] Implement more database connections
-  - [ ] `mysql_async`
-  - [ ] `rusqlite`
+- Implement more database connections/pools
+  - `bb8-postgres`
+  - `mysql_async`
+  - `rusqlite`
