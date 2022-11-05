@@ -71,7 +71,77 @@ pub mod transform {
     }
 }
 
-pub mod client {
+pub mod deadpool {
+    use async_trait::async_trait;
+
+    use crate::{
+        config::connection::PgDeadpoolConn,
+        domain::base::{
+            Repository, RepositoryError, TransactionState, TransactionUnit, Transactor, UnitOfWork,
+        },
+    };
+
+    pub type PgDeadpoolUnit = PgDeadpoolConn;
+    pub struct PgDeadpoolTrxUnit<'t> {
+        // NOTE: not possible to disambiguate `<deadpool_postgres::Client as Deref>::transaction`
+        // so the transaction client type is not wrapped
+        pub client: tokio_postgres::Transaction<'t>,
+        pub state: TransactionState,
+    }
+
+    impl Repository for PgDeadpoolUnit {
+        type Connection = PgDeadpoolConn;
+    }
+
+    impl Transactor for PgDeadpoolUnit {
+        type Transaction<'t> = PgDeadpoolTrxUnit<'t>;
+    }
+
+    #[async_trait]
+    impl<'t> UnitOfWork for PgDeadpoolUnit {
+        async fn transaction<'s>(&'s mut self) -> Result<Self::Transaction<'s>, RepositoryError> {
+            let client = tokio_postgres::Client::transaction(self).await?;
+            let state = TransactionState::from_open_transaction(0);
+            Ok(Self::Transaction { client, state })
+        }
+    }
+
+    impl<'t> Repository for PgDeadpoolTrxUnit<'t> {
+        type Connection = PgDeadpoolConn;
+    }
+
+    impl<'t> Transactor for PgDeadpoolTrxUnit<'t> {
+        type Transaction<'trx> = PgDeadpoolTrxUnit<'trx>;
+    }
+
+    #[async_trait]
+    impl<'t> TransactionUnit for PgDeadpoolTrxUnit<'t> {
+        async fn commit(self) -> Result<(), RepositoryError> {
+            self.commit().await?;
+            Ok(())
+        }
+
+        async fn rollback(self) -> Result<(), RepositoryError> {
+            self.rollback().await?;
+            Ok(())
+        }
+
+        async fn save_point<'s>(
+            &'s mut self,
+            name: &str,
+        ) -> Result<Self::Transaction<'s>, RepositoryError> {
+            let state = TransactionState::from_open_transaction(self.depth() + 1);
+            let client = self.client.savepoint(name).await?;
+            Ok(Self::Transaction { client, state })
+        }
+
+        fn depth(&self) -> u32 {
+            self.state.depth
+        }
+    }
+}
+
+pub mod tokio {
     use async_trait::async_trait;
     use tokio_postgres::{Client, GenericClient, Transaction};
 
@@ -85,8 +155,8 @@ pub mod client {
         pub(super) transaction: TransactionState,
     }
 
-    pub type PgUnit = PgClient<Client>;
-    pub type PgTrxUnit<'t> = PgClient<Transaction<'t>>;
+    pub type PgTokioUnit = PgClient<Client>;
+    pub type PgTokioTrxUnit<'t> = PgClient<Transaction<'t>>;
 
     pub(super) enum OpenTransaction<'c, C: GenericClient> {
         Created(Transaction<'c>),
@@ -125,11 +195,11 @@ pub mod client {
     }
 
     impl<C: GenericClient> Transactor for PgClient<C> {
-        type Transaction<'t> = PgTrxUnit<'t>;
+        type Transaction<'t> = PgTokioTrxUnit<'t>;
     }
 
     #[async_trait]
-    impl UnitOfWork for PgUnit {
+    impl UnitOfWork for PgTokioUnit {
         async fn transaction<'s>(&'s mut self) -> Result<Self::Transaction<'s>, RepositoryError> {
             let trx = self.client.transaction().await?;
             Ok(Self::Transaction {
@@ -140,7 +210,7 @@ pub mod client {
     }
 
     #[async_trait]
-    impl<'t> TransactionUnit for PgTrxUnit<'t> {
+    impl<'t> TransactionUnit for PgTokioTrxUnit<'t> {
         async fn commit(self) -> Result<(), RepositoryError> {
             self.client.commit().await?;
             Ok(())
@@ -154,10 +224,7 @@ pub mod client {
         async fn save_point<'s>(
             &'s mut self,
             name: &str,
-        ) -> Result<Self::Transaction<'s>, RepositoryError>
-        where
-            Self: Sized,
-        {
+        ) -> Result<Self::Transaction<'s>, RepositoryError> {
             let depth = self.depth() + 1;
             let point = self.client.savepoint(name).await?;
             Ok(Self::Transaction::from_transaction(point, depth))
@@ -175,42 +242,8 @@ pub mod repository {
     use tokio_postgres::GenericClient;
     use uuid::Uuid;
 
-    use super::client::{OpenTransaction, PgClient};
     use crate::domain::{base::RepositoryError, entity::User, repository::UserRepository};
     use crate::infra::{database::transform::user_from_row, sql};
-
-    #[async_trait]
-    impl<C: GenericClient + Send + Sync> UserRepository for PgClient<C> {
-        async fn find(&self, id: &Uuid) -> Result<Option<User>, RepositoryError> {
-            let (u_sttm, p_sttm) = {
-                let sql::SelectUserSttm { user, phone } = sql::select_user_by_id(id);
-                (
-                    user.build(PostgresQueryBuilder),
-                    phone.build(PostgresQueryBuilder),
-                )
-            };
-
-            let u_rows = self.client.query(&u_sttm.0, &u_sttm.1.as_params()).await;
-            let p_rows = self.client.query(&p_sttm.0, &p_sttm.1.as_params()).await;
-
-            let user = user_from_row(u_rows?, p_rows?).into_iter().next();
-            Ok(user)
-        }
-
-        async fn insert<I: IntoIterator<Item = User> + Send>(
-            &mut self,
-            users: I,
-        ) -> Result<(), RepositoryError> {
-            let mut trx = self.make_transaction().await?;
-
-            match trx {
-                OpenTransaction::Created(ref mut trx) => insert_user(trx, users).await?,
-                OpenTransaction::Reused(trx) => insert_user(trx, users).await?,
-            }
-
-            Ok(())
-        }
-    }
 
     async fn insert_user<C, I>(trx: &mut C, users: I) -> Result<(), RepositoryError>
     where
@@ -227,5 +260,103 @@ pub mod repository {
         trx.query(&c_sttm.0, &c_sttm.1.as_params()).await?;
         trx.query(&p_sttm.0, &p_sttm.1.as_params()).await?;
         Ok(())
+    }
+
+    pub mod pgtokio_repo {
+        use super::*;
+        use crate::infra::database::tokio::{OpenTransaction, PgClient};
+
+        #[async_trait]
+        impl<C: GenericClient + Send + Sync> UserRepository for PgClient<C> {
+            async fn find(&self, id: &Uuid) -> Result<Option<User>, RepositoryError> {
+                let (u_sttm, p_sttm) = {
+                    let sql::SelectUserSttm { user, phone } = sql::select_user_by_id(id);
+                    (
+                        user.build(PostgresQueryBuilder),
+                        phone.build(PostgresQueryBuilder),
+                    )
+                };
+
+                let u_rows = self.client.query(&u_sttm.0, &u_sttm.1.as_params()).await?;
+                let p_rows = self.client.query(&p_sttm.0, &p_sttm.1.as_params()).await?;
+
+                let user = user_from_row(u_rows, p_rows).into_iter().next();
+                Ok(user)
+            }
+
+            async fn insert<I>(&mut self, users: I) -> Result<(), RepositoryError>
+            where
+                I: IntoIterator<Item = User> + Send,
+            {
+                let mut trx = self.make_transaction().await?;
+
+                match trx {
+                    OpenTransaction::Created(ref mut trx) => insert_user(trx, users).await?,
+                    OpenTransaction::Reused(trx) => insert_user(trx, users).await?,
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    pub mod deadpool_repo {
+        use super::*;
+        use crate::infra::database::deadpool::{PgDeadpoolTrxUnit, PgDeadpoolUnit};
+
+        #[async_trait]
+        impl UserRepository for PgDeadpoolUnit {
+            async fn find(&self, id: &Uuid) -> Result<Option<User>, RepositoryError> {
+                let (u_sttm, p_sttm) = {
+                    let sql::SelectUserSttm { user, phone } = sql::select_user_by_id(id);
+                    (
+                        user.build(PostgresQueryBuilder),
+                        phone.build(PostgresQueryBuilder),
+                    )
+                };
+
+                let u_rows = self.query(&u_sttm.0, &u_sttm.1.as_params()).await?;
+                let p_rows = self.query(&p_sttm.0, &p_sttm.1.as_params()).await?;
+
+                let user = user_from_row(u_rows, p_rows).into_iter().next();
+                Ok(user)
+            }
+
+            async fn insert<I>(&mut self, users: I) -> Result<(), RepositoryError>
+            where
+                I: IntoIterator<Item = User> + Send,
+            {
+                let mut trx = tokio_postgres::Client::transaction(self).await?;
+                insert_user(&mut trx, users).await?;
+                Ok(())
+            }
+        }
+
+        #[async_trait]
+        impl<'t> UserRepository for PgDeadpoolTrxUnit<'t> {
+            async fn find(&self, id: &Uuid) -> Result<Option<User>, RepositoryError> {
+                let (u_sttm, p_sttm) = {
+                    let sql::SelectUserSttm { user, phone } = sql::select_user_by_id(id);
+                    (
+                        user.build(PostgresQueryBuilder),
+                        phone.build(PostgresQueryBuilder),
+                    )
+                };
+
+                let u_rows = self.client.query(&u_sttm.0, &u_sttm.1.as_params()).await?;
+                let p_rows = self.client.query(&p_sttm.0, &p_sttm.1.as_params()).await?;
+
+                let user = user_from_row(u_rows, p_rows).into_iter().next();
+                Ok(user)
+            }
+
+            async fn insert<I>(&mut self, users: I) -> Result<(), RepositoryError>
+            where
+                I: IntoIterator<Item = User> + Send,
+            {
+                insert_user(&mut self.client, users).await?;
+                Ok(())
+            }
+        }
     }
 }

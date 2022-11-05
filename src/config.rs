@@ -1,9 +1,11 @@
 pub mod connection {
-    use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime, SslMode};
-    use tokio_postgres::{Client, NoTls};
+    use std::time::Duration;
+
+    use bb8_postgres::{bb8, PostgresConnectionManager};
+    use deadpool_postgres::{ManagerConfig, RecyclingMethod};
     use tokio_postgres_rustls::MakeRustlsConnect;
 
-    fn connection_config() -> Config {
+    fn connection_config() -> tokio_postgres::Config {
         let host = std::env::var("DATABASE_HOST").expect("Missing env var DATABASE_HOST");
         let database = std::env::var("DATABASE_NAME").expect("Missing env var DATABASE_NAME");
         let port: u16 = std::env::var("DATABASE_PORT")
@@ -14,17 +16,15 @@ pub mod connection {
         let password =
             std::env::var("DATABASE_PASSWORD").expect("Missing env var DATABASE_PASSWORD");
 
-        let mut cfg = Config::new();
-        cfg.dbname = Some(database);
-        cfg.user = Some(user);
-        cfg.password = Some(password);
-        cfg.port = Some(port);
-        cfg.host = Some(host);
-        cfg.manager = Some(ManagerConfig {
-            recycling_method: RecyclingMethod::Fast,
-        });
-        cfg.application_name = Some("lf_import_lambda".into());
-        cfg.ssl_mode = Some(SslMode::Prefer);
+        let mut cfg = tokio_postgres::Config::new();
+        cfg.dbname(&database);
+        cfg.user(&user);
+        cfg.password(password);
+        cfg.port(port);
+        cfg.host(&host);
+        cfg.connect_timeout(Duration::from_millis(5000));
+        cfg.application_name("UoW test".into());
+        cfg.ssl_mode(tokio_postgres::config::SslMode::Require);
         cfg
     }
 
@@ -46,14 +46,48 @@ pub mod connection {
         MakeRustlsConnect::new(tls_config)
     }
 
-    pub fn create_pool() -> Pool {
-        let cfg = connection_config();
+    fn deadpool_config(cfg: tokio_postgres::Config) -> deadpool_postgres::Config {
+        let host = std::env::var("DATABASE_HOST").expect("Missing env var DATABASE_HOST");
 
-        cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap()
+        let mut config = deadpool_postgres::Config::new();
+        config.dbname = cfg.get_dbname().map(ToOwned::to_owned);
+        config.user = cfg.get_user().map(ToOwned::to_owned);
+        config.password = cfg
+            .get_password()
+            .map(|pass| String::from_utf8(pass.into()).unwrap());
+        config.port = cfg.get_ports().iter().nth(0).copied();
+        config.host = Some(host);
+        config.connect_timeout = cfg.get_connect_timeout().cloned();
+        config.application_name = Some("UoW test".into());
+        config.ssl_mode = Some(deadpool_postgres::SslMode::Require);
+        config.manager = Some(ManagerConfig {
+            recycling_method: RecyclingMethod::Fast,
+        });
+        config
     }
 
-    pub fn create_client() -> Client {
-        // create raw tokio_postgres client
-        todo!()
+    pub type PgDeadpool = deadpool_postgres::Pool;
+    pub type PgDeadpoolConn = deadpool_postgres::Client;
+    pub type PgBb8pool = bb8::Pool<PostgresConnectionManager<MakeRustlsConnect>>;
+
+    pub fn create_deadpool() -> PgDeadpool {
+        let config = connection_config();
+        let tls = tls_config();
+
+        deadpool_config(config)
+            .create_pool(Some(deadpool_postgres::Runtime::Tokio1), tls)
+            .unwrap()
+    }
+
+    pub async fn create_bb8pool() -> PgBb8pool {
+        let config = connection_config();
+        let tls = tls_config();
+        let manager = PostgresConnectionManager::new(config, tls);
+
+        bb8::Pool::builder()
+            .max_size(5)
+            .build(manager)
+            .await
+            .unwrap()
     }
 }

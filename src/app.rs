@@ -5,7 +5,7 @@ pub mod usecase {
             entity::{CreateUserDto, User},
             repository::UserRepository,
         },
-        infra::database::client::PgUnit,
+        infra::database::deadpool::PgDeadpoolUnit,
     };
 
     async fn validate_user_data<Cr>(_data: &CreateUserDto, _repo: &Cr)
@@ -28,7 +28,9 @@ pub mod usecase {
         let mut trx = unit.transaction().await.unwrap();
 
         trx.insert([user.clone()]).await.unwrap();
-        trx.insert([user.clone()]).await.unwrap();
+        UserRepository::insert(&mut trx, [user.clone()])
+            .await
+            .unwrap();
 
         trx.commit().await.unwrap();
 
@@ -38,14 +40,19 @@ pub mod usecase {
         Err(())
     }
 
-    pub async fn concrete_create_user(mut unit: PgUnit, data: CreateUserDto) -> Result<User, ()> {
+    pub async fn concrete_create_user(
+        mut unit: PgDeadpoolUnit,
+        data: CreateUserDto,
+    ) -> Result<User, ()> {
         validate_user_data(&data, &unit).await;
         let user = User::try_from(data)?;
 
         let mut trx = unit.transaction().await.unwrap();
 
         trx.insert([user.clone()]).await.unwrap();
-        trx.insert([user.clone()]).await.unwrap();
+        UserRepository::insert(&mut trx, [user.clone()])
+            .await
+            .unwrap();
 
         trx.commit().await.unwrap();
 
