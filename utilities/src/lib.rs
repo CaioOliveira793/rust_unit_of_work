@@ -1,3 +1,58 @@
+pub mod env_var {
+    use lazy_static::lazy_static;
+
+    lazy_static! {
+        static ref ENV_VAR: EnvVar = load_env();
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct EnvVar {
+        pub port: u16,
+        pub token_key: String,
+        pub database_host: String,
+        pub database_port: u16,
+        pub database_name: String,
+        pub database_user: String,
+        pub database_password: String,
+        pub database_url: String,
+    }
+
+    macro_rules! get_env {
+        ($env:literal) => {
+            std::env::var($env).expect(concat!("Missing env var ", $env))
+        };
+    }
+
+    fn load_env() -> EnvVar {
+        let port: u16 = get_env!("PORT").parse().expect("Invalid PORT");
+        let token_key = get_env!("TOKEN_KEY");
+        let database_host = get_env!("DATABASE_HOST");
+        let database_name = get_env!("DATABASE_NAME");
+        let database_user = get_env!("DATABASE_USER");
+        let database_password = get_env!("DATABASE_PASSWORD");
+        let database_port: u16 = get_env!("DATABASE_PORT")
+            .parse()
+            .expect("Invalid DATABASE_PORT");
+
+        let database_url = format!("postgres://{database_user}:{database_password}@{database_host}:{database_port}/{database_name}");
+
+        EnvVar {
+            port,
+            token_key,
+            database_host,
+            database_name,
+            database_password,
+            database_port,
+            database_user,
+            database_url,
+        }
+    }
+
+    pub fn get() -> &'static EnvVar {
+        &ENV_VAR
+    }
+}
+
 pub mod connection {
     use std::time::Duration;
 
@@ -5,23 +60,17 @@ pub mod connection {
     use deadpool_postgres::{ManagerConfig, RecyclingMethod};
     use tokio_postgres_rustls::MakeRustlsConnect;
 
+    use super::env_var;
+
     fn connection_config() -> tokio_postgres::Config {
-        let host = std::env::var("DATABASE_HOST").expect("Missing env var DATABASE_HOST");
-        let database = std::env::var("DATABASE_NAME").expect("Missing env var DATABASE_NAME");
-        let port: u16 = std::env::var("DATABASE_PORT")
-            .expect("Missing env var DATABASE_PORT")
-            .parse()
-            .expect("Invalid env var DATABASE_PORT");
-        let user = std::env::var("DATABASE_USER").expect("Missing env var DATABASE_USER");
-        let password =
-            std::env::var("DATABASE_PASSWORD").expect("Missing env var DATABASE_PASSWORD");
+        let env = env_var::get();
 
         let mut cfg = tokio_postgres::Config::new();
-        cfg.dbname(&database);
-        cfg.user(&user);
-        cfg.password(password);
-        cfg.port(port);
-        cfg.host(&host);
+        cfg.dbname(&env.database_name);
+        cfg.user(&env.database_user);
+        cfg.password(env.database_password.clone());
+        cfg.port(env.database_port);
+        cfg.host(&env.database_host);
         cfg.connect_timeout(Duration::from_millis(5000));
         cfg.application_name("UoW test".into());
         cfg.ssl_mode(tokio_postgres::config::SslMode::Require);
@@ -47,7 +96,7 @@ pub mod connection {
     }
 
     fn deadpool_config(cfg: tokio_postgres::Config) -> deadpool_postgres::Config {
-        let host = std::env::var("DATABASE_HOST").expect("Missing env var DATABASE_HOST");
+        let env = env_var::get();
 
         let mut config = deadpool_postgres::Config::new();
         config.dbname = cfg.get_dbname().map(ToOwned::to_owned);
@@ -56,7 +105,7 @@ pub mod connection {
             .get_password()
             .map(|pass| String::from_utf8(pass.into()).unwrap());
         config.port = cfg.get_ports().iter().nth(0).copied();
-        config.host = Some(host);
+        config.host = Some(env.database_host.clone());
         config.connect_timeout = cfg.get_connect_timeout().cloned();
         config.application_name = Some("UoW test".into());
         config.ssl_mode = Some(deadpool_postgres::SslMode::Require);
@@ -85,6 +134,18 @@ pub mod connection {
         bb8::Pool::builder()
             .max_size(5)
             .build(manager)
+            .await
+            .unwrap()
+    }
+
+    pub async fn create_sqlx_pool() -> sqlx::PgPool {
+        let dburl = env_var::get().database_url.clone();
+        sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .acquire_timeout(Duration::from_millis(1000))
+            .idle_timeout(Duration::from_millis(1000 * 30))
+            .max_lifetime(Duration::from_millis(1000 * 10))
+            .connect(&dburl)
             .await
             .unwrap()
     }

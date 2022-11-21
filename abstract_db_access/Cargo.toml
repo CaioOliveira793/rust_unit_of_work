@@ -34,6 +34,7 @@ sqlx-core = { version = "0.6.2", default-features = false, optional = true }
 [dev-dependencies]
 utilities = { path = "../utilities" }
 
+sqlx = { version = "0.6.2", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "uuid"] }
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread", "net"] }
 tokio-postgres = { version = "0.7.7", features = ["with-uuid-1"] }
 
@@ -45,4 +46,12 @@ path = "examples/pg_deadpool.rs"
 test = true
 required-features = [
 	"pg_deadpool"
+]
+
+[[example]]
+name = "sqlx"
+path = "examples/sqlx.rs"
+test = true
+required-features = [
+	"sqlx"
 ]
