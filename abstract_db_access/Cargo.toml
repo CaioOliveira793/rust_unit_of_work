@@ -14,19 +14,22 @@ path = "src/lib.rs"
 [features]
 default = []
 pg_tokio = [
-	"tokio-postgres"
+	"dep:tokio-postgres"
 ]
 pg_deadpool = [
-	"tokio-postgres",
-	"deadpool-postgres"
+	"dep:tokio-postgres",
+	"dep:deadpool-postgres"
 ]
-pg_bb8 = []
+sqlx = [
+	"dep:sqlx-core"
+]
 
 [dependencies]
 async-trait = { version = "0.1.58" }
 
-tokio-postgres = { version = "0.7.7", optional = true }
-deadpool-postgres = { version = "0.10.3", optional = true }
+tokio-postgres = { version = "0.7.7", default-features = false, optional = true }
+deadpool-postgres = { version = "0.10.3", default-features = false, optional = true }
+sqlx-core = { version = "0.6.2", default-features = false, optional = true }
 
 [dev-dependencies]
 utilities = { path = "../utilities" }

@@ -5,6 +5,7 @@ use super::{
 };
 
 pub type PgUnit = deadpool_postgres::Client;
+
 pub struct PgTrxUnit<'t> {
     // NOTE: not possible to disambiguate `<deadpool_postgres::Client as Deref>::transaction`
     // so the transaction client type is not wrapped

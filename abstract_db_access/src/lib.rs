@@ -93,3 +93,6 @@ pub mod pg_tokio;
 
 #[cfg(feature = "pg_deadpool")]
 pub mod pg_deadpool;
+
+#[cfg(feature = "sqlx")]
+pub mod sqlx;
