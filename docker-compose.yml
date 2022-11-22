@@ -1,0 +1,17 @@
+version: '3.7'
+
+services:
+  postgres_db:
+    container_name: postgres_db
+    image: docker.io/library/postgres:14-bullseye
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+      PGDATA: "/var/lib/postgresql/test"
+    volumes:
+      - postgres_data:/var/lib/postgresql/test
+    ports:
+      - ${DATABASE_PORT}:5432
+volumes:
+  postgres_data: null

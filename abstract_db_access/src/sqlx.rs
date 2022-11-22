@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use super::{DbAccess, DbUnit, RepositoryError, TransactionUnit, Transactor};
+use super::{DbAccess, RepositoryError, TransactionUnit, Transactor};
 
 pub type SqlxUnit<DB> = sqlx_core::pool::PoolConnection<DB>;
 
@@ -27,13 +27,17 @@ impl<DB: sqlx_core::database::Database> Transactor for SqlxUnit<DB> {
     type Transaction<'t> = SqlxTrxUnit<'t, DB>;
 }
 
-#[async_trait]
-impl<DB: sqlx_core::database::Database> DbUnit for SqlxUnit<DB> {
-    async fn transaction<'s>(&'s mut self) -> Result<Self::Transaction<'s>, RepositoryError> {
-        let trx = self.transaction().await.unwrap();
-        Ok(trx)
-    }
-}
+// NOTE: to begin a transaction is required to consume the connection, and the current API
+// only thoes a mutable borrow of the connection
+// #[async_trait]
+// impl<DB: sqlx_core::database::Database> DbUnit for SqlxUnit<DB> {
+//     async fn transaction<'s>(&'s mut self) -> Result<Self::Transaction<'s>, RepositoryError> {
+//         use sqlx_core::acquire::Acquire;
+
+//         let trx = sqlx_core::pool::PoolConnection::begin(self).await.unwrap();
+//         Ok(trx)
+//     }
+// }
 
 impl<'t, DB: sqlx_core::database::Database> DbAccess for SqlxTrxUnit<'t, DB> {
     type Connection = SqlxUnit<DB>;
@@ -49,12 +53,16 @@ impl<'t, DB: sqlx_core::database::Database> Transactor for SqlxTrxUnit<'t, DB> {
 #[async_trait]
 impl<'t, DB: sqlx_core::database::Database> TransactionUnit for SqlxTrxUnit<'t, DB> {
     async fn commit(self) -> Result<(), RepositoryError> {
-        self.commit().await.unwrap();
+        sqlx_core::transaction::Transaction::commit(self)
+            .await
+            .unwrap();
         Ok(())
     }
 
     async fn rollback(self) -> Result<(), RepositoryError> {
-        self.rollback().await.unwrap();
+        sqlx_core::transaction::Transaction::rollback(self)
+            .await
+            .unwrap();
         Ok(())
     }
 }

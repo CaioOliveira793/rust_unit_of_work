@@ -36,6 +36,8 @@ pub struct TransactionState {
     /// Indicates if transaction is open
     open: bool,
     /// Determines the transaction depth level
+    ///
+    /// Level 0 is the first
     depth: u32,
 }
 
@@ -47,10 +49,6 @@ impl TransactionState {
 
     #[inline]
     pub fn from_open_transaction(depth: u32) -> Self {
-        debug_assert!(
-            depth > 0,
-            "a open transaction must have at least one level of depth"
-        );
         Self { open: true, depth }
     }
 

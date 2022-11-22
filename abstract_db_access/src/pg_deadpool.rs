@@ -41,12 +41,12 @@ impl<'t> Transactor for PgTrxUnit<'t> {
 #[async_trait]
 impl<'t> TransactionUnit for PgTrxUnit<'t> {
     async fn commit(self) -> Result<(), RepositoryError> {
-        self.commit().await?;
+        self.client.commit().await?;
         Ok(())
     }
 
     async fn rollback(self) -> Result<(), RepositoryError> {
-        self.rollback().await?;
+        self.client.rollback().await?;
         Ok(())
     }
 }

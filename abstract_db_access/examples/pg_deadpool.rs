@@ -5,7 +5,7 @@ use abstract_db_access::{
 use async_trait::async_trait;
 use utilities::connection;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct User {
     id: uuid::Uuid,
     name: String,
@@ -32,7 +32,7 @@ trait UserRepository: DbAccess {
 impl UserRepository for PgUnit {
     async fn insert(&mut self, user: User) -> Result<(), RepositoryError> {
         self.query(
-            "INSERT INTO user (id, name, email) VALUES ($1, $2, $3)",
+            "INSERT INTO public.user (id, name, email) VALUES ($1, $2, $3)",
             &[&user.id, &user.name, &user.email],
         )
         .await?;
@@ -42,7 +42,7 @@ impl UserRepository for PgUnit {
     async fn find(&self, id: uuid::Uuid) -> Result<Option<User>, RepositoryError> {
         let row = self
             .query_opt(
-                "SELECT (id, name, email) FROM user WHERE user.id = $1",
+                "SELECT (id, name, email) FROM public.user WHERE user.id = $1",
                 &[&id],
             )
             .await?;
@@ -56,7 +56,7 @@ impl<'t> UserRepository for PgTrxUnit<'t> {
     async fn insert(&mut self, user: User) -> Result<(), RepositoryError> {
         self.client
             .query(
-                "INSERT INTO user (id, name, email) VALUES ($1, $2, $3)",
+                "INSERT INTO public.user (id, name, email) VALUES ($1, $2, $3)",
                 &[&user.id, &user.name, &user.email],
             )
             .await?;
@@ -67,7 +67,7 @@ impl<'t> UserRepository for PgTrxUnit<'t> {
         let row = self
             .client
             .query_opt(
-                "SELECT (id, name, email) FROM user WHERE user.id = $1",
+                "SELECT (id, name, email) FROM public.user WHERE user.id = $1",
                 &[&id],
             )
             .await?;
@@ -112,26 +112,49 @@ where
 
     trx.commit().await.unwrap();
 
-    UserRepository::insert(&mut unit, user).await.unwrap();
+    let restored_user = UserRepository::find(&mut unit, user.id).await.unwrap();
+
+    assert_eq!(restored_user, Some(user));
 
     Ok(())
 }
 
+async fn setup_db(pool: &deadpool_postgres::Pool) {
+    let mut client = pool.get().await.unwrap();
+    let trx = client.transaction().await.unwrap();
+    trx.client
+        .batch_execute(concat!(
+            "DROP SCHEMA IF EXISTS public CASCADE;\n",
+            "CREATE SCHEMA IF NOT EXISTS public;\n",
+            "SET search_path TO public;\n",
+            include_str!("dbschema.sql")
+        ))
+        .await
+        .unwrap();
+    trx.commit().await.unwrap();
+}
+
 #[tokio::main]
 async fn main() {
-    let user = User {
+    let mut users = (0..).map(|idx| User {
         id: uuid::Uuid::new_v4(),
-        email: "rustac@email.com".into(),
-        name: "Rustacean".into(),
-    };
+        email: format!("rustac{idx}@email.com"),
+        name: format!("Rustacean {idx}"),
+    });
 
     let pool = connection::create_pg_deadpool();
 
-    let client = pool.get().await.unwrap();
-    multi_repo(client, user.clone()).await.unwrap();
+    setup_db(&pool).await;
 
     let client = pool.get().await.unwrap();
-    multi_repo_transaction(client, user.clone()).await.unwrap();
+    multi_repo(client, users.next().unwrap().clone())
+        .await
+        .unwrap();
+
+    let client = pool.get().await.unwrap();
+    multi_repo_transaction(client, users.next().unwrap().clone())
+        .await
+        .unwrap();
 
     // NOTE: HRTB issue
     // let client = pool.get().await.unwrap();

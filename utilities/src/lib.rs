@@ -7,8 +7,6 @@ pub mod env_var {
 
     #[derive(Debug, Clone)]
     pub struct EnvVar {
-        pub port: u16,
-        pub token_key: String,
         pub database_host: String,
         pub database_port: u16,
         pub database_name: String,
@@ -24,8 +22,6 @@ pub mod env_var {
     }
 
     fn load_env() -> EnvVar {
-        let port: u16 = get_env!("PORT").parse().expect("Invalid PORT");
-        let token_key = get_env!("TOKEN_KEY");
         let database_host = get_env!("DATABASE_HOST");
         let database_name = get_env!("DATABASE_NAME");
         let database_user = get_env!("DATABASE_USER");
@@ -37,8 +33,6 @@ pub mod env_var {
         let database_url = format!("postgres://{database_user}:{database_password}@{database_host}:{database_port}/{database_name}");
 
         EnvVar {
-            port,
-            token_key,
             database_host,
             database_name,
             database_password,
@@ -73,7 +67,7 @@ pub mod connection {
         cfg.host(&env.database_host);
         cfg.connect_timeout(Duration::from_millis(5000));
         cfg.application_name("UoW test".into());
-        cfg.ssl_mode(tokio_postgres::config::SslMode::Require);
+        cfg.ssl_mode(tokio_postgres::config::SslMode::Prefer);
         cfg
     }
 
@@ -108,7 +102,7 @@ pub mod connection {
         config.host = Some(env.database_host.clone());
         config.connect_timeout = cfg.get_connect_timeout().cloned();
         config.application_name = Some("UoW test".into());
-        config.ssl_mode = Some(deadpool_postgres::SslMode::Require);
+        config.ssl_mode = Some(deadpool_postgres::SslMode::Prefer);
         config.manager = Some(ManagerConfig {
             recycling_method: RecyclingMethod::Fast,
         });
